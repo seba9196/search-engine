@@ -1,36 +1,122 @@
-from whoosh.index import create_in
-from whoosh.fields import *
 import os
-
-schema = Schema(title=TEXT(stored=True), path=ID(stored=True), content=TEXT)
-if not os.path.exists("indexdir"):
-   os.mkdir("indexdir")
-ix = create_in("indexdir", schema)
-writer = ix.writer()
-
-from nltk.corpus import brown
-from nltk.corpus import inaugural
-from nltk.tokenize import word_tokenize
-import string
-
-for doc in inaugural.fileids():
-    raw = inaugural.raw(doc)
-    #writer.add_document(title=doc, path="/a", content=raw)
-    writer.add_document(title=doc, content=raw)
-
-writer.commit()
-
+import requests
+import logging
+from bs4 import BeautifulSoup
+from whoosh.fields import Schema, TEXT, ID, NUMERIC, DATETIME
+from whoosh.index import create_in, open_dir
 from whoosh.qparser import QueryParser
-with ix.searcher() as searcher:
-    while True:
-        i = input("Cosa vuoi cercare?(premi q per uscire) ")
-        if i == "q":
-            break
+from argparse import ArgumentParser
+
+logger = logging.Logger("default")
+
+scp_series = [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6.0",
+    "6.5",
+    "7.0",
+    "7.5",
+    "8.0",
+    "8.5",
+    "9.0",
+    "9.5",
+]
+
+schema_dir = "indexdir"
+
+
+def main():
+    parser = setup_argparse()
+    args = parser.parse_args()
+    if args.gen_index:
+        ix = generate_index()
+    else:
+        try:
+            ix = open_dir(schema_dir)
+        except:
+            print("Before searching you need to generate the index")
+            exit(1)
+
+    with ix.searcher() as searcher:
+        query = args.query
+        query = QueryParser("content", ix.schema).parse(query)
+        results = searcher.search(query, limit=10, terms=True)
+        if len(results) == 0:
+            print("no results found!")
         else:
-            query = QueryParser("content", ix.schema).parse(i)
-            results = searcher.search(query)
-            if len(results) == 0:
-                print("NESSUN RISULTATO TROVATO")
-            else:
-                for i in results:
-                    print(i)
+            for hit in results:
+                print(hit["scp_name"], hit["url"])
+                print(hit.matched_terms())
+
+
+def generate_index():
+    if not os.path.exists("indexdir"):
+        os.mkdir("indexdir")
+    schema = Schema(
+        scp_name=TEXT(stored=True),
+        url=ID(stored=True),
+        rating=NUMERIC(stored=True),
+        creator=TEXT(stored=True),
+        # creation_date = DATETIME(stored=True),
+        content=TEXT(),
+        # series = NUMERIC(stored=True)
+    )
+    ix = create_in(schema_dir, schema)
+    writer = ix.writer()
+    for s in scp_series:
+        print(f"processing series {s}")
+        url = f"https://scp-data.tedivm.com/data/scp/items/content_series-{s}.json"
+        response = requests.get(url)
+        scp_metadata = response.json()
+
+        for item_id, item_data in scp_metadata.items():
+            creator = item_data["creator"]
+            url = item_data["url"]
+            html = item_data["raw_content"]
+            text = clean_html(html)
+            rating = item_data["rating"]
+            created = item_data["created_at"]
+
+            try:
+                rating = int(rating)
+            except:
+                print(rating)
+
+            writer.add_document(
+                scp_name=item_id,
+                url=url,
+                rating=rating,
+                creator=creator,
+                # creation_date = created,
+                content=text,
+                # series = s,
+            )
+    writer.commit()
+    return ix
+
+
+def setup_argparse():
+    parser = ArgumentParser(description="Script to search SCPs")
+    parser.add_argument("query", help="insert the query you want to search")
+    parser.add_argument("--gen-index", action="store_true", help="index the content")
+    return parser
+
+
+# Funzione per pulire l'HTML
+def clean_html(html_content):
+    soup = BeautifulSoup(html_content, "lxml")
+    # Rimuovi i tag di script e stile
+    for script_or_style in soup(["script", "style"]):
+        script_or_style.decompose()
+    # Ottieni il testo pulito
+    clean_text = soup.get_text(separator=" ")
+    # Rimuovi spazi multipli
+    clean_text = " ".join(clean_text.split())
+    return clean_text
+
+
+if __name__ == "__main__":
+    main()
