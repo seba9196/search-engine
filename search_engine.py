@@ -3,13 +3,21 @@ import os
 import requests
 import logging
 from bs4 import BeautifulSoup
-from whoosh.analysis import StemmingAnalyzer
 from whoosh.fields import Schema, TEXT, ID, NUMERIC, DATETIME
 from whoosh.index import create_in, open_dir
 from whoosh.qparser import QueryParser
 from argparse import ArgumentParser
 
+import string
+
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+
 logger = logging.Logger("default")
+
+stop_words = set(stopwords.words("english"))
+lemmatizer = WordNetLemmatizer()
 
 scp_series = [
     "1",
@@ -45,7 +53,9 @@ def main():
     if args.query:
         with ix.searcher() as searcher:
             query = args.query
-            query = QueryParser("content", ix.schema).parse(query)
+            preprocessed_query = " ".join(preprocess(query))
+            print(preprocessed_query)
+            query = QueryParser("content", ix.schema).parse(preprocessed_query)
             results = searcher.search(query, limit=10, terms=True)
             if len(results) == 0:
                 print("no results found!")
@@ -64,11 +74,13 @@ def generate_index():
         rating=NUMERIC(stored=True),
         creator=TEXT(stored=True),
         creation_date=DATETIME(stored=True),
-        content=TEXT(analyzer=StemmingAnalyzer()),
+        content=TEXT(),
         series=NUMERIC(stored=True),
     )
     ix = create_in(schema_dir, schema)
     writer = ix.writer()
+
+    indexed_items = 0
     for s in scp_series:
         print(f"processing series {s}")
         url = f"https://scp-data.tedivm.com/data/scp/items/content_series-{s}.json"
@@ -105,23 +117,28 @@ def generate_index():
                 rating=rating,
                 creator=creator,
                 creation_date=creation_date,
-                content=text,
+                content=preprocess(text),
                 series=series_number,
             )
+        print(f"indexed {len(scp_metadata)} items for series {s}")
+        indexed_items += len(scp_metadata)
     writer.commit()
+    print(f"indexed items: {indexed_items}")
     return ix
 
 
-def setup_argparse():
-    parser = ArgumentParser(description="Script to search SCPs")
-    parser.add_argument(
-        "query",
-        help="insert the query you want to search",
-        default=None,
-        nargs="?",
-    )
-    parser.add_argument("--gen-index", action="store_true", help="index the content")
-    return parser
+def preprocess(text):
+    text = text.lower()
+    tokens = word_tokenize(text)  # Tokenizzazione
+    tokens = [
+        word for word in tokens if word not in string.punctuation and not word.isdigit()
+    ]  # Rimozione punteggiatura e numeri
+    tokens = [lemmatizer.lemmatize(token) for token in tokens]  # Lemmatizzazione
+    return tokens
+
+
+def remove_stopwords(tokens):
+    return [word for word in tokens if word.lower() not in stop_words]
 
 
 # Funzione per pulire l'HTML
@@ -135,6 +152,18 @@ def clean_html(html_content):
     # Rimuovi spazi multipli
     clean_text = " ".join(clean_text.split())
     return clean_text
+
+
+def setup_argparse():
+    parser = ArgumentParser(description="Script to search SCPs")
+    parser.add_argument(
+        "query",
+        help="insert the query you want to search",
+        default=None,
+        nargs="?",
+    )
+    parser.add_argument("--gen-index", action="store_true", help="index the content")
+    return parser
 
 
 if __name__ == "__main__":
