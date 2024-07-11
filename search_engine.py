@@ -42,6 +42,7 @@ def main():
             print("Before searching you need to generate the index")
             exit(1)
 
+    if args.query:
         with ix.searcher() as searcher:
             query = args.query
             query = QueryParser("content", ix.schema).parse(query)
@@ -113,7 +114,12 @@ def generate_index():
 
 def setup_argparse():
     parser = ArgumentParser(description="Script to search SCPs")
-    parser.add_argument("query", help="insert the query you want to search")
+    parser.add_argument(
+        "query",
+        help="insert the query you want to search",
+        default=None,
+        nargs="?",
+    )
     parser.add_argument("--gen-index", action="store_true", help="index the content")
     return parser
 
