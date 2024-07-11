@@ -1,7 +1,9 @@
+from datetime import datetime
 import os
 import requests
 import logging
 from bs4 import BeautifulSoup
+from whoosh.analysis import StemmingAnalyzer
 from whoosh.fields import Schema, TEXT, ID, NUMERIC, DATETIME
 from whoosh.index import create_in, open_dir
 from whoosh.qparser import QueryParser
@@ -40,16 +42,16 @@ def main():
             print("Before searching you need to generate the index")
             exit(1)
 
-    with ix.searcher() as searcher:
-        query = args.query
-        query = QueryParser("content", ix.schema).parse(query)
-        results = searcher.search(query, limit=10, terms=True)
-        if len(results) == 0:
-            print("no results found!")
-        else:
-            for hit in results:
-                print(hit["scp_name"], hit["url"])
-                print(hit.matched_terms())
+        with ix.searcher() as searcher:
+            query = args.query
+            query = QueryParser("content", ix.schema).parse(query)
+            results = searcher.search(query, limit=10, terms=True)
+            if len(results) == 0:
+                print("no results found!")
+            else:
+                for hit in results:
+                    print(hit["scp_name"], hit["url"])
+                    print(hit.matched_terms())
 
 
 def generate_index():
@@ -60,9 +62,9 @@ def generate_index():
         url=ID(stored=True),
         rating=NUMERIC(stored=True),
         creator=TEXT(stored=True),
-        # creation_date = DATETIME(stored=True),
-        content=TEXT(),
-        # series = NUMERIC(stored=True)
+        creation_date=DATETIME(stored=True),
+        content=TEXT(analyzer=StemmingAnalyzer()),
+        series=NUMERIC(stored=True),
     )
     ix = create_in(schema_dir, schema)
     writer = ix.writer()
@@ -83,16 +85,27 @@ def generate_index():
             try:
                 rating = int(rating)
             except:
-                print(rating)
+                print(f"found invalid int for rating {rating}")
+
+            try:
+                series_number = int(float(s))
+            except:
+                print(f"invalid nunber for series {s}")
+
+            try:
+                creation_date = datetime.strptime(created, r"%Y-%m-%dT%H:%M:%S")
+            except Exception as e:
+                print(f"Invalid date format: {created}, error: {e}")
+                print(f"invalide date format: {created}")
 
             writer.add_document(
                 scp_name=item_id,
                 url=url,
                 rating=rating,
                 creator=creator,
-                # creation_date = created,
+                creation_date=creation_date,
                 content=text,
-                # series = s,
+                series=series_number,
             )
     writer.commit()
     return ix
