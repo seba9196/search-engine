@@ -14,10 +14,16 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 
+import gensim
+from gensim import corpora
+from gensim import similarities
+import numpy as np
+
 logger = logging.Logger("default")
 
 stop_words = set(stopwords.words("english"))
 lemmatizer = WordNetLemmatizer()
+
 
 scp_series = [
     "1",
@@ -37,10 +43,12 @@ scp_series = [
 
 schema_dir = "indexdir"
 
+#train_corpus = []
 
 def main():
     parser = setup_argparse()
     args = parser.parse_args()
+
     if args.gen_index:
         ix = generate_index()
     else:
@@ -63,7 +71,48 @@ def main():
                 for hit in results:
                     print(hit["scp_name"], hit["url"])
                     print(hit.matched_terms())
+    
+    if args.word2vec:
+        train_corpus = list(read_corpus())
+        dictionary_t = create_dictionary(train_corpus)
+        bow_corpus = [dictionary_t.doc2bow(text) for text in [t.words for t in train_corpus]]
+        tfidf = gensim.models.TfidfModel(bow_corpus)
+        index_t = similarities.SparseMatrixSimilarity(tfidf[bow_corpus], num_features=len(dictionary_t))
+        #index_t.index.shape
+        query = input("Inserisci query per word2vec: ")
+        query = query.split()
+        for d in get_closest_n(query,10,dictionary_t,index_t, tfidf,train_corpus):
+            print(f"{d[1]:.3f}: {d[0].tags[1]}")
+    
+    if args.doc2vec:
+        train_corpus = list(read_corpus())
+        model = gensim.models.doc2vec.Doc2Vec(vector_size=50, min_count=2, epochs=100, seed=1)
+        model.build_vocab(train_corpus)
 
+        #train the model
+        print("STO ALLENANDO IL MODELLO")
+        model.train(train_corpus, total_examples=model.corpus_count, epochs=model.epochs)
+        print("ALLENAMENTO FINITO")
+        '''
+        ranks = []
+        second_ranks = []
+        for doc_id in range(len(train_corpus)):
+            inferred_vector = model.infer_vector(train_corpus[doc_id].words)
+            sims = model.dv.most_similar([inferred_vector], topn=len(model.dv))
+            rank = [docid for docid, sim in sims].index(doc_id)
+            ranks.append(rank)
+
+            second_ranks.append(sims[1])
+
+        print(ranks[:10])
+        '''
+        query_ter = input("Inserisci query per doc2vec: ")
+        query_ter = query_ter.split()
+        inferred_vector = model.infer_vector(query_ter)
+        sims = model.dv.most_similar([inferred_vector], topn=len(model.dv))
+        for index in range(10):
+            most_similar_key, similarity = sims[index]
+            print(f"{most_similar_key}: {similarity:.4f}")
 
 def generate_index():
     if not os.path.exists("indexdir"):
@@ -163,8 +212,48 @@ def setup_argparse():
         nargs="?",
     )
     parser.add_argument("--gen-index", action="store_true", help="index the content")
+    parser.add_argument("--word2vec", action="store_true", help="use word2vec model, usare il comando senza la query")
+    parser.add_argument("--doc2vec", action="store_true", help="use doc2vec model, usare il comando senza la query")
     return parser
 
+def read_corpus(tokens_only=False):
+    scp_series = ["1"]
+    doc_id = 0
+    for s in scp_series:
+        print(f"processing series {s}")
+        url = f"https://scp-data.tedivm.com/data/scp/items/content_series-{s}.json"
+        response = requests.get(url)
+        scp_metadata = response.json()
+
+        for item_id, item_data in scp_metadata.items():
+            url = item_data["url"]
+            html = item_data["raw_content"]
+            text = clean_html(html)
+            tokens = gensim.utils.simple_preprocess(text)
+            if tokens_only:
+                yield tokens
+            else:
+                # For training data, add tags
+                doc_id += 1
+                yield gensim.models.doc2vec.TaggedDocument(tokens, [doc_id-1,url])
+        print(f"end of processing series {s}")
+
+def create_dictionary(t_docs):
+    'create dictionary of words in preprocessed corpus'
+    docs = [t.words for t in t_docs]
+    dictionary = corpora.Dictionary(docs)
+    return dictionary
+
+def get_closest_n(query_document, n, dictionary, index, tfidf, t_corpus):
+    '''get the top matching docs as per cosine similarity
+    between tfidf vector of query and all docs'''
+    query_bow = dictionary.doc2bow(query_document)
+    sims = index[tfidf[query_bow]]
+
+    top_idx = sims.argsort()[-1*n:][::-1]
+    top_val = np.sort(sims)[-1*n:][::-1]
+    # return most similar documents and the related similarities
+    return [(t_corpus[i[0]], i[1]) for i in zip(top_idx, top_val)]
 
 if __name__ == "__main__":
     main()
