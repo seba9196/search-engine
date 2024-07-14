@@ -24,7 +24,6 @@ logger = logging.Logger("default")
 stop_words = set(stopwords.words("english"))
 lemmatizer = WordNetLemmatizer()
 
-
 scp_series = [
     "1",
     "2",
@@ -42,8 +41,6 @@ scp_series = [
 ]
 
 schema_dir = "indexdir"
-
-#train_corpus = []
 
 def main():
     parser = setup_argparse()
@@ -82,7 +79,7 @@ def main():
         query = input("Inserisci query per word2vec: ")
         query = query.split()
         for d in get_closest_n(query,10,dictionary_t,index_t, tfidf,train_corpus):
-            print(f"{d[1]:.3f}: {d[0].tags[1]}")
+            print(f"{d[1]:.3f}: {d[0].tags[0]}")
     
     if args.doc2vec:
         train_corpus = list(read_corpus())
@@ -226,6 +223,7 @@ def read_corpus(tokens_only=False):
         scp_metadata = response.json()
 
         for item_id, item_data in scp_metadata.items():
+            scp_name = item_id
             url = item_data["url"]
             html = item_data["raw_content"]
             text = clean_html(html)
@@ -235,7 +233,7 @@ def read_corpus(tokens_only=False):
             else:
                 # For training data, add tags
                 doc_id += 1
-                yield gensim.models.doc2vec.TaggedDocument(tokens, [doc_id-1,url])
+                yield gensim.models.doc2vec.TaggedDocument(tokens, [(scp_name,url)])
         print(f"end of processing series {s}")
 
 def create_dictionary(t_docs):
