@@ -102,38 +102,26 @@ def main():
         for d in get_closest_n(query, 10, dictionary_t, index_t, tfidf, train_corpus):
             print(f"{d[1]:.3f}: {d[0].tags[0]}")
 
-    if args.doc2vec:
+    if args.doc2vec_train:
         corpus = get_corpus_documents(["1"])
         model = gensim.models.doc2vec.Doc2Vec(
             vector_size=50, min_count=2, epochs=100, seed=1
         )
-
-        # TODO: verificare se serve
-        print("costruzione vocabolario")
         model.build_vocab(corpus)
-
-        # train the model
-        print("STO ALLENANDO IL MODELLO")
         model.train(
             corpus,
             total_examples=model.corpus_count,
             epochs=model.epochs,
         )
+        model.save("doc2vec.model")
+        print("Model training completed")
 
-        print("ALLENAMENTO FINITO")
-        """
-        ranks = []
-        second_ranks = []
-        for doc_id in range(len(train_corpus)):
-            inferred_vector = model.infer_vector(train_corpus[doc_id].words)
-            sims = model.dv.most_similar([inferred_vector], topn=len(model.dv))
-            rank = [docid for docid, sim in sims].index(doc_id)
-            ranks.append(rank)
+    if args.doc2vec:
+        if not os.path.exists("doc2vec.model"):
+            print("Before searching you need to train the model")
+            exit(1)
+        model = gensim.models.doc2vec.Doc2Vec.load("doc2vec.model")
 
-            second_ranks.append(sims[1])
-
-        print(ranks[:10])
-        """
         query_ter = input("Inserisci query per doc2vec: ")
         query_ter = query_ter.split()
         inferred_vector = model.infer_vector(query_ter)
@@ -273,6 +261,12 @@ def setup_argparse():
         action="store_true",
         help="use word2vec model, usare il comando senza la query",
     )
+    parser.add_argument(
+        "--doc2vec-train",
+        action="store_true",
+        help="use doc2vec model, usare il comando senza la query",
+    )
+
     parser.add_argument(
         "--doc2vec",
         action="store_true",
