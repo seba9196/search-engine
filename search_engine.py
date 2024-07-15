@@ -58,9 +58,10 @@ def main():
     if args.query:
         with ix.searcher() as searcher:
             query = args.query
-            preprocessed_query = " ".join(preprocess(query))
-            print(preprocessed_query)
-            query = QueryParser("content", ix.schema).parse(preprocessed_query)
+            #preprocessed_query = " ".join(preprocess(query))
+            #print(preprocessed_query)
+            #query = QueryParser("content", ix.schema).parse(preprocessed_query)
+            query = QueryParser("content", ix.schema).parse(query)
             results = searcher.search(query, limit=10, terms=True)
             if len(results) == 0:
                 print("no results found!")
