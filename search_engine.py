@@ -7,6 +7,7 @@ from whoosh.fields import Schema, TEXT, ID, NUMERIC, DATETIME
 from whoosh.index import create_in, open_dir
 from whoosh.qparser import QueryParser
 from argparse import ArgumentParser
+from tqdm import tqdm
 
 import string
 
@@ -42,6 +43,21 @@ scp_series = [
 
 schema_dir = "indexdir"
 
+
+class ScpItem:
+    def __init__(self, name, url, rating, creator, creation_date, story, series):
+        self.name = name
+        self.url = url
+        self.rating = rating
+        self.creator = creator
+        self.creation_date = creation_date
+        self.story = story
+        self.series = series
+
+    # def __str__(self):
+    #     return f"ScpItem({self.scp_name}, {self.url}, {self.rating}, {self.creator}, {self.creation_date}, {self.sotry}, {self.series})"
+
+
 def main():
     parser = setup_argparse()
     args = parser.parse_args()
@@ -58,9 +74,9 @@ def main():
     if args.query:
         with ix.searcher() as searcher:
             query = args.query
-            #preprocessed_query = " ".join(preprocess(query))
-            #print(preprocessed_query)
-            #query = QueryParser("content", ix.schema).parse(preprocessed_query)
+            # preprocessed_query = " ".join(preprocess(query))
+            # print(preprocessed_query)
+            # query = QueryParser("content", ix.schema).parse(preprocessed_query)
             query = QueryParser("content", ix.schema).parse(query)
             results = searcher.search(query, limit=10, terms=True)
             if len(results) == 0:
@@ -69,29 +85,43 @@ def main():
                 for hit in results:
                     print(hit["scp_name"], hit["url"])
                     print(hit.matched_terms())
-    
+
     if args.word2vec:
         train_corpus = list(read_corpus())
         dictionary_t = create_dictionary(train_corpus)
-        bow_corpus = [dictionary_t.doc2bow(text) for text in [t.words for t in train_corpus]]
+        bow_corpus = [
+            dictionary_t.doc2bow(text) for text in [t.words for t in train_corpus]
+        ]
         tfidf = gensim.models.TfidfModel(bow_corpus)
-        index_t = similarities.SparseMatrixSimilarity(tfidf[bow_corpus], num_features=len(dictionary_t))
-        #index_t.index.shape
+        index_t = similarities.SparseMatrixSimilarity(
+            tfidf[bow_corpus], num_features=len(dictionary_t)
+        )
+        # index_t.index.shape
         query = input("Inserisci query per word2vec: ")
         query = query.split()
-        for d in get_closest_n(query,10,dictionary_t,index_t, tfidf,train_corpus):
+        for d in get_closest_n(query, 10, dictionary_t, index_t, tfidf, train_corpus):
             print(f"{d[1]:.3f}: {d[0].tags[0]}")
-    
-    if args.doc2vec:
-        train_corpus = list(read_corpus())
-        model = gensim.models.doc2vec.Doc2Vec(vector_size=50, min_count=2, epochs=100, seed=1)
-        model.build_vocab(train_corpus)
 
-        #train the model
+    if args.doc2vec:
+        corpus = get_corpus_documents(["1"])
+        model = gensim.models.doc2vec.Doc2Vec(
+            vector_size=50, min_count=2, epochs=100, seed=1
+        )
+
+        # TODO: verificare se serve
+        print("costruzione vocabolario")
+        model.build_vocab(corpus)
+
+        # train the model
         print("STO ALLENANDO IL MODELLO")
-        model.train(train_corpus, total_examples=model.corpus_count, epochs=model.epochs)
+        model.train(
+            corpus,
+            total_examples=model.corpus_count,
+            epochs=model.epochs,
+        )
+
         print("ALLENAMENTO FINITO")
-        '''
+        """
         ranks = []
         second_ranks = []
         for doc_id in range(len(train_corpus)):
@@ -103,7 +133,7 @@ def main():
             second_ranks.append(sims[1])
 
         print(ranks[:10])
-        '''
+        """
         query_ter = input("Inserisci query per doc2vec: ")
         query_ter = query_ter.split()
         inferred_vector = model.infer_vector(query_ter)
@@ -112,9 +142,11 @@ def main():
             most_similar_key, similarity = sims[index]
             print(f"{most_similar_key}: {similarity:.4f}")
 
+
 def generate_index():
     if not os.path.exists("indexdir"):
         os.mkdir("indexdir")
+
     schema = Schema(
         scp_name=TEXT(stored=True),
         url=ID(stored=True),
@@ -124,12 +156,42 @@ def generate_index():
         content=TEXT(),
         series=NUMERIC(stored=True),
     )
+
     ix = create_in(schema_dir, schema)
+
     writer = ix.writer()
 
     indexed_items = 0
-    for s in scp_series:
-        print(f"processing series {s}")
+
+    items = get_scp_items()
+    with tqdm(total=8064, desc="Indexing items") as pbar:
+        for item in items:
+            writer.add_document(
+                scp_name=item.name,
+                url=item.url,
+                rating=item.rating,
+                creator=item.creator,
+                creation_date=item.creation_date,
+                content=preprocess(item.story),
+                series=item.series,
+            )
+            pbar.update(1)
+
+    writer.commit()
+    return ix
+
+
+def get_corpus_documents(series=scp_series):
+    documents = []
+    for item in get_scp_items(series):
+        print("processing item", item.name)
+        tokens = gensim.utils.simple_preprocess(item.story)
+        documents.append(gensim.models.doc2vec.TaggedDocument(tokens, [item.name]))
+    return documents
+
+
+def get_scp_items(series=scp_series):
+    for s in series:
         url = f"https://scp-data.tedivm.com/data/scp/items/content_series-{s}.json"
         response = requests.get(url)
         scp_metadata = response.json()
@@ -158,25 +220,21 @@ def generate_index():
                 print(f"Invalid date format: {created}, error: {e}")
                 print(f"invalide date format: {created}")
 
-            writer.add_document(
-                scp_name=item_id,
+            yield ScpItem(
+                name=item_id,
                 url=url,
                 rating=rating,
                 creator=creator,
                 creation_date=creation_date,
-                content=preprocess(text),
+                story=text,
                 series=series_number,
             )
-        print(f"indexed {len(scp_metadata)} items for series {s}")
-        indexed_items += len(scp_metadata)
-    writer.commit()
-    print(f"indexed items: {indexed_items}")
-    return ix
 
 
 def preprocess(text):
     text = text.lower()
     tokens = word_tokenize(text)  # Tokenizzazione
+    tokens = remove_stopwords(tokens)  # Rimozione stopwords
     tokens = [
         word for word in tokens if word not in string.punctuation and not word.isdigit()
     ]  # Rimozione punteggiatura e numeri
@@ -210,9 +268,18 @@ def setup_argparse():
         nargs="?",
     )
     parser.add_argument("--gen-index", action="store_true", help="index the content")
-    parser.add_argument("--word2vec", action="store_true", help="use word2vec model, usare il comando senza la query")
-    parser.add_argument("--doc2vec", action="store_true", help="use doc2vec model, usare il comando senza la query")
+    parser.add_argument(
+        "--word2vec",
+        action="store_true",
+        help="use word2vec model, usare il comando senza la query",
+    )
+    parser.add_argument(
+        "--doc2vec",
+        action="store_true",
+        help="use doc2vec model, usare il comando senza la query",
+    )
     return parser
+
 
 def read_corpus(tokens_only=False):
     scp_series = ["1"]
@@ -228,31 +295,33 @@ def read_corpus(tokens_only=False):
             url = item_data["url"]
             html = item_data["raw_content"]
             text = clean_html(html)
-            tokens = gensim.utils.simple_preprocess(text)
             if tokens_only:
                 yield tokens
             else:
                 # For training data, add tags
                 doc_id += 1
-                yield gensim.models.doc2vec.TaggedDocument(tokens, [(scp_name,url)])
+                yield
         print(f"end of processing series {s}")
 
+
 def create_dictionary(t_docs):
-    'create dictionary of words in preprocessed corpus'
+    "create dictionary of words in preprocessed corpus"
     docs = [t.words for t in t_docs]
     dictionary = corpora.Dictionary(docs)
     return dictionary
 
+
 def get_closest_n(query_document, n, dictionary, index, tfidf, t_corpus):
-    '''get the top matching docs as per cosine similarity
-    between tfidf vector of query and all docs'''
+    """get the top matching docs as per cosine similarity
+    between tfidf vector of query and all docs"""
     query_bow = dictionary.doc2bow(query_document)
     sims = index[tfidf[query_bow]]
 
-    top_idx = sims.argsort()[-1*n:][::-1]
-    top_val = np.sort(sims)[-1*n:][::-1]
+    top_idx = sims.argsort()[-1 * n :][::-1]
+    top_val = np.sort(sims)[-1 * n :][::-1]
     # return most similar documents and the related similarities
     return [(t_corpus[i[0]], i[1]) for i in zip(top_idx, top_val)]
+
 
 if __name__ == "__main__":
     main()
