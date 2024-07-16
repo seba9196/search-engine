@@ -73,11 +73,18 @@ def main():
 
     if args.query:
         with ix.searcher() as searcher:
-            query = args.query
-            # preprocessed_query = " ".join(preprocess(query))
+            query_string = args.query
+            preprocessed_query = " ".join(preprocess(query_string))
             # print(preprocessed_query)
             # query = QueryParser("content", ix.schema).parse(preprocessed_query)
-            query = QueryParser("content", ix.schema).parse(query)
+            query_parser = QueryParser("content", ix.schema)
+            query = query_parser.parse(preprocessed_query)
+            corrected = searcher.correct_query(query, query_string)
+
+            if corrected.query != query:
+                response = input(f'Did you mean: "{corrected.string}"? (y/n): ')
+                if response == "y":
+                    query = corrected.query
             results = searcher.search(query, limit=10, terms=True)
             if len(results) == 0:
                 print("no results found!")
@@ -86,24 +93,8 @@ def main():
                     print(hit["scp_name"], hit["url"])
                     print(hit.matched_terms())
 
-    if args.word2vec:
-        train_corpus = list(read_corpus())
-        dictionary_t = create_dictionary(train_corpus)
-        bow_corpus = [
-            dictionary_t.doc2bow(text) for text in [t.words for t in train_corpus]
-        ]
-        tfidf = gensim.models.TfidfModel(bow_corpus)
-        index_t = similarities.SparseMatrixSimilarity(
-            tfidf[bow_corpus], num_features=len(dictionary_t)
-        )
-        # index_t.index.shape
-        query = input("Inserisci query per word2vec: ")
-        query = query.split()
-        for d in get_closest_n(query, 10, dictionary_t, index_t, tfidf, train_corpus):
-            print(f"{d[1]:.3f}: {d[0].tags[0]}")
-
     if args.doc2vec_train:
-        corpus = get_corpus_documents(["1"])
+        corpus = get_corpus_documents()
         model = gensim.models.doc2vec.Doc2Vec(
             vector_size=50, min_count=2, epochs=100, seed=1
         )
@@ -141,7 +132,7 @@ def generate_index():
         rating=NUMERIC(stored=True),
         creator=TEXT(stored=True),
         creation_date=DATETIME(stored=True),
-        content=TEXT(),
+        content=TEXT(spelling=True),
         series=NUMERIC(stored=True),
     )
 
@@ -257,7 +248,7 @@ def setup_argparse():
     )
     parser.add_argument("--gen-index", action="store_true", help="index the content")
     parser.add_argument(
-        "--word2vec",
+        "--word2vec-train",
         action="store_true",
         help="use word2vec model, usare il comando senza la query",
     )
@@ -273,29 +264,6 @@ def setup_argparse():
         help="use doc2vec model, usare il comando senza la query",
     )
     return parser
-
-
-def read_corpus(tokens_only=False):
-    scp_series = ["1"]
-    doc_id = 0
-    for s in scp_series:
-        print(f"processing series {s}")
-        url = f"https://scp-data.tedivm.com/data/scp/items/content_series-{s}.json"
-        response = requests.get(url)
-        scp_metadata = response.json()
-
-        for item_id, item_data in scp_metadata.items():
-            scp_name = item_id
-            url = item_data["url"]
-            html = item_data["raw_content"]
-            text = clean_html(html)
-            if tokens_only:
-                yield tokens
-            else:
-                # For training data, add tags
-                doc_id += 1
-                yield
-        print(f"end of processing series {s}")
 
 
 def create_dictionary(t_docs):
