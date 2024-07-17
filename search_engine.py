@@ -57,18 +57,17 @@ def main():
     args = parser.parse_args()
 
     model = args.model
-    score = args.scoring
     if args.train:
         train(model)
 
     query_string = args.query
     if query_string:
-        results = search(model, score, query_string)
+        results = search(model, query_string)
         for r in results:
             print(f"SCP: {r}, URL: https://scp-wiki.wikidot.com/{r}")
 
 
-def search(model, score, query_string):
+def search(model, query_string):
     if model == "doc2vec":
         if not os.path.exists("doc2vec.model"):
             print("Before searching you need to train the model")
@@ -80,16 +79,16 @@ def search(model, score, query_string):
         sims = model.dv.most_similar([inferred_vector], topn=len(model.dv))
         return [s[0] for s in sims[:10]]
 
-    if model == "vector":
+    if model == "vector-BM25F" or model == "vector-TFIDF":
         try:
             ix = open_dir(schema_dir)
         except:
             print("Before searching you need to generate the index")
             exit(1)
 
-        if score == "TF_IDF":
+        if model == "vector-TFIDF":
             searcher = ix.searcher(weighting=scoring.TF_IDF())
-        else:
+        elif model == "vector-BM25F":
             searcher = ix.searcher(weighting=scoring.BM25F(B=0.75, content_B=1.0, K1=1.5))
 
         with searcher as s:
@@ -112,7 +111,7 @@ def search(model, score, query_string):
 def train(model):
     if model == "doc2vec":
         train_doc2vec()
-    if model == "vector":
+    if model == "vector-BM25F" or model == "vector-TFIDF":
         generate_index()
 
 
@@ -236,13 +235,7 @@ def setup_argparse():
     parser.add_argument(
         "model",
         help="choose the model to use",
-        choices=["vector", "doc2vec"],
-    )
-
-    parser.add_argument(
-        "scoring",
-        help="if you use the vector model you choose the scoring algorithm to use",
-        choices=["BM25F", "TF_IDF"],
+        choices=["vector-BM25F","vector-TFIDF", "doc2vec"],
     )
 
     parser.add_argument(
