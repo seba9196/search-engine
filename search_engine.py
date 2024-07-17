@@ -10,6 +10,7 @@ from argparse import ArgumentParser
 from tqdm import tqdm
 from whoosh.analysis import StandardAnalyzer
 
+from whoosh import qparser
 import gensim
 from gensim import corpora
 import numpy as np
@@ -66,7 +67,8 @@ def main():
     if args.query:
         with ix.searcher() as searcher:
             query_string = args.query
-            query_parser = QueryParser("content", ix.schema)
+            og = qparser.OrGroup.factory(0.85)
+            query_parser = QueryParser("content", ix.schema, group=og)
             query = query_parser.parse(query_string)
             corrected = searcher.correct_query(query, query_string)
 
