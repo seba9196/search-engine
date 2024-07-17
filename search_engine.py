@@ -55,18 +55,37 @@ def main():
     parser = setup_argparse()
     args = parser.parse_args()
 
-    if args.gen_index:
-        ix = generate_index()
-    else:
+    model = args.model
+    if args.train:
+        train(model)
+
+    query_string = args.query
+    if query_string:
+        results = search(model, query_string)
+        for r in results:
+            print(f"SCP: {r}, URL: https://scp-wiki.wikidot.com/{r}")
+
+
+def search(model, query_string):
+    if model == "doc2vec":
+        if not os.path.exists("doc2vec.model"):
+            print("Before searching you need to train the model")
+            exit(1)
+        model = gensim.models.doc2vec.Doc2Vec.load("doc2vec.model")
+
+        query_ter = query_string.split()
+        inferred_vector = model.infer_vector(query_ter)
+        sims = model.dv.most_similar([inferred_vector], topn=len(model.dv))
+        return [s[0] for s in sims[:10]]
+
+    if model == "vector":
         try:
             ix = open_dir(schema_dir)
         except:
             print("Before searching you need to generate the index")
             exit(1)
 
-    if args.query:
         with ix.searcher() as searcher:
-            query_string = args.query
             og = qparser.OrGroup.factory(0.85)
             query_parser = QueryParser("content", ix.schema, group=og)
             query = query_parser.parse(query_string)
@@ -80,37 +99,29 @@ def main():
             if len(results) == 0:
                 print("no results found!")
             else:
-                for hit in results:
-                    print(hit["scp_name"], hit["url"])
-                    print(hit.matched_terms())
+                return [r["scp_name"] for r in results[:10]]
 
-    if args.doc2vec_train:
-        corpus = get_corpus_documents()
-        model = gensim.models.doc2vec.Doc2Vec(
-            vector_size=50, min_count=2, epochs=100, seed=1
-        )
-        model.build_vocab(corpus)
-        model.train(
-            corpus,
-            total_examples=model.corpus_count,
-            epochs=model.epochs,
-        )
-        model.save("doc2vec.model")
-        print("Model training completed")
 
-    if args.doc2vec:
-        if not os.path.exists("doc2vec.model"):
-            print("Before searching you need to train the model")
-            exit(1)
-        model = gensim.models.doc2vec.Doc2Vec.load("doc2vec.model")
+def train(model):
+    if model == "doc2vec":
+        train_doc2vec()
+    if model == "vector":
+        generate_index()
 
-        query_ter = input("Inserisci query per doc2vec: ")
-        query_ter = query_ter.split()
-        inferred_vector = model.infer_vector(query_ter)
-        sims = model.dv.most_similar([inferred_vector], topn=len(model.dv))
-        for index in range(10):
-            most_similar_key, similarity = sims[index]
-            print(f"{most_similar_key}: {similarity:.4f}")
+
+def train_doc2vec():
+    corpus = get_corpus_documents()
+    model = gensim.models.doc2vec.Doc2Vec(
+        vector_size=50, min_count=2, epochs=100, seed=1
+    )
+    model.build_vocab(corpus)
+    model.train(
+        corpus,
+        total_examples=model.corpus_count,
+        epochs=model.epochs,
+    )
+    model.save("doc2vec.model")
+    print("Model training completed")
 
 
 def generate_index():
@@ -131,9 +142,7 @@ def generate_index():
 
     writer = ix.writer()
 
-    indexed_items = 0
-
-    items = get_scp_items(["1"])
+    items = get_scp_items()
     with tqdm(total=8064, desc="Indexing items") as pbar:
         for item in items:
             writer.add_document(
@@ -156,9 +165,7 @@ def get_corpus_documents(series=scp_series):
     for item in get_scp_items(series):
         print("processing item", item.name)
         tokens = gensim.utils.simple_preprocess(item.story)
-        documents.append(
-            gensim.models.doc2vec.TaggedDocument(tokens, [item.name, item.url])
-        )
+        documents.append(gensim.models.doc2vec.TaggedDocument(tokens, [item.name]))
     return documents
 
 
@@ -218,49 +225,22 @@ def clean_html(html_content):
 
 def setup_argparse():
     parser = ArgumentParser(description="Script to search SCPs")
+
+    parser.add_argument(
+        "model",
+        help="choose the model to use",
+        choices=["vector", "doc2vec"],
+    )
+
     parser.add_argument(
         "query",
         help="insert the query you want to search",
         default=None,
         nargs="?",
     )
-    parser.add_argument("--gen-index", action="store_true", help="index the content")
-    parser.add_argument(
-        "--word2vec-train",
-        action="store_true",
-        help="use word2vec model, usare il comando senza la query",
-    )
-    parser.add_argument(
-        "--doc2vec-train",
-        action="store_true",
-        help="use doc2vec model, usare il comando senza la query",
-    )
 
-    parser.add_argument(
-        "--doc2vec",
-        action="store_true",
-        help="use doc2vec model, usare il comando senza la query",
-    )
+    parser.add_argument("--train", action="store_true", help="train the model")
     return parser
-
-
-def create_dictionary(t_docs):
-    "create dictionary of words in preprocessed corpus"
-    docs = [t.words for t in t_docs]
-    dictionary = corpora.Dictionary(docs)
-    return dictionary
-
-
-def get_closest_n(query_document, n, dictionary, index, tfidf, t_corpus):
-    """get the top matching docs as per cosine similarity
-    between tfidf vector of query and all docs"""
-    query_bow = dictionary.doc2bow(query_document)
-    sims = index[tfidf[query_bow]]
-
-    top_idx = sims.argsort()[-1 * n :][::-1]
-    top_val = np.sort(sims)[-1 * n :][::-1]
-    # return most similar documents and the related similarities
-    return [(t_corpus[i[0]], i[1]) for i in zip(top_idx, top_val)]
 
 
 if __name__ == "__main__":
