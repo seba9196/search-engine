@@ -8,22 +8,14 @@ from whoosh.index import create_in, open_dir
 from whoosh.qparser import QueryParser
 from argparse import ArgumentParser
 from tqdm import tqdm
-
-import string
-
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-from nltk.stem import WordNetLemmatizer
+from whoosh.analysis import StandardAnalyzer
 
 import gensim
 from gensim import corpora
-from gensim import similarities
 import numpy as np
 
 logger = logging.Logger("default")
 
-stop_words = set(stopwords.words("english"))
-lemmatizer = WordNetLemmatizer()
 
 scp_series = [
     "1",
@@ -74,11 +66,8 @@ def main():
     if args.query:
         with ix.searcher() as searcher:
             query_string = args.query
-            preprocessed_query = " ".join(preprocess(query_string))
-            # print(preprocessed_query)
-            # query = QueryParser("content", ix.schema).parse(preprocessed_query)
             query_parser = QueryParser("content", ix.schema)
-            query = query_parser.parse(preprocessed_query)
+            query = query_parser.parse(query_string)
             corrected = searcher.correct_query(query, query_string)
 
             if corrected.query != query:
@@ -132,7 +121,7 @@ def generate_index():
         rating=NUMERIC(stored=True),
         creator=TEXT(stored=True),
         creation_date=DATETIME(stored=True),
-        content=TEXT(spelling=True),
+        content=TEXT(spelling=True, analyzer=StandardAnalyzer()),
         series=NUMERIC(stored=True),
     )
 
@@ -142,7 +131,7 @@ def generate_index():
 
     indexed_items = 0
 
-    items = get_scp_items()
+    items = get_scp_items(["1"])
     with tqdm(total=8064, desc="Indexing items") as pbar:
         for item in items:
             writer.add_document(
@@ -151,7 +140,7 @@ def generate_index():
                 rating=item.rating,
                 creator=item.creator,
                 creation_date=item.creation_date,
-                content=preprocess(item.story),
+                content=item.story,
                 series=item.series,
             )
             pbar.update(1)
@@ -165,7 +154,9 @@ def get_corpus_documents(series=scp_series):
     for item in get_scp_items(series):
         print("processing item", item.name)
         tokens = gensim.utils.simple_preprocess(item.story)
-        documents.append(gensim.models.doc2vec.TaggedDocument(tokens, [item.name]))
+        documents.append(
+            gensim.models.doc2vec.TaggedDocument(tokens, [item.name, item.url])
+        )
     return documents
 
 
@@ -208,21 +199,6 @@ def get_scp_items(series=scp_series):
                 story=text,
                 series=series_number,
             )
-
-
-def preprocess(text):
-    text = text.lower()
-    tokens = word_tokenize(text)  # Tokenizzazione
-    tokens = remove_stopwords(tokens)  # Rimozione stopwords
-    tokens = [
-        word for word in tokens if word not in string.punctuation and not word.isdigit()
-    ]  # Rimozione punteggiatura e numeri
-    tokens = [lemmatizer.lemmatize(token) for token in tokens]  # Lemmatizzazione
-    return tokens
-
-
-def remove_stopwords(tokens):
-    return [word for word in tokens if word.lower() not in stop_words]
 
 
 # Funzione per pulire l'HTML
