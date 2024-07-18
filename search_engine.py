@@ -79,17 +79,19 @@ def search(model, query_string):
         sims = model.dv.most_similar([inferred_vector], topn=len(model.dv))
         return [s[0] for s in sims[:10]]
 
-    if model == "vector-BM25F" or model == "vector-TFIDF":
+    if model == "BM25F" or model == "TFIDF":
         try:
             ix = open_dir(schema_dir)
         except:
             print("Before searching you need to generate the index")
             exit(1)
 
-        if model == "vector-TFIDF":
+        if model == "TFIDF":
             searcher = ix.searcher(weighting=scoring.TF_IDF())
-        elif model == "vector-BM25F":
-            searcher = ix.searcher(weighting=scoring.BM25F(B=0.75, content_B=1.0, K1=1.5))
+        elif model == "BM25F":
+            searcher = ix.searcher(
+                weighting=scoring.BM25F(B=0.75, content_B=1.0, K1=1.5)
+            )
 
         with searcher as s:
             og = qparser.OrGroup.factory(0.85)
@@ -111,7 +113,7 @@ def search(model, query_string):
 def train(model):
     if model == "doc2vec":
         train_doc2vec()
-    if model == "vector-BM25F" or model == "vector-TFIDF":
+    if model == "BM25F" or model == "TFIDF":
         generate_index()
 
 
@@ -235,7 +237,7 @@ def setup_argparse():
     parser.add_argument(
         "model",
         help="choose the model to use",
-        choices=["vector-BM25F","vector-TFIDF", "doc2vec"],
+        choices=["BM25F", "TFIDF", "doc2vec"],
     )
 
     parser.add_argument(
