@@ -16,6 +16,10 @@ Per eseguire l'applicazione utilizzare il seguente comando
     
     python3 search_engine.py [-h] [--train] {vector-BM25F,vector-TFIDF,doc2vec} [query]
 
+Per eseguire test sull'applicazione
+    
+    bash test.py
+
 # Utilizzo
 Sono presenti 3 comandi principali per eseguire l'applicazione:
 * vector-BM25F --> ricerca utilizzando l'inverted index e BM25F come algoritmo di ranking
