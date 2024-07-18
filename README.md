@@ -47,7 +47,7 @@ Elenco di query per mostrare il **default query language** di Whoosh:
 * Gli articoli scitti nelle **date tra 2010-11-04 e 2024-06-01** -> "creation_date:[20101104 TO 20240601]"
 * Gli articoli che parlano di **vampire** scritti nelle **date tra 2011-11-14 e 2024-01-15** e con **rating compreso tra 100 e 500** -> "vampire AND creation_date:[20111114 TO 20240115] AND rating:[100 TO 500]"
 
-Elenco di query utilizzate per eseguire i benchmark:
+Elenco di query utilizzate per eseguire i **benchmark**:
 
     Esplora SCP con caratteristiche bioingegneristiche avanzate
     Query: "Explore SCPs with advanced bioengineering features"
