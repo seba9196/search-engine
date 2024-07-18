@@ -5,7 +5,7 @@ Progetto per il corso universitario di Gestione dell'Informazione
 # Installazione
 
 Scaricare le dipendenze necessarie
-    ```bash
+    
     python3 -m venv env
     
     source env/bin/activate
