@@ -11,6 +11,7 @@ Il progetto è un search enginge per gli item della [SCP Foundation](https://scp
 
 
 La Fondazione SCP è un'organizzazione fittizia presente in progetti di scrittura collaborativa, il cui scopo è garantire la sicurezza, il contenimento e la protezione di anomalie (SCP). Queste anomalie possono essere oggetti, entità o fenomeni che sfidano le leggi naturali e rappresentano una minaccia per l'umanità. La missione della Fondazione è studiare e comprendere queste anomalie per prevenire danni.
+
 Oggetti SCP
 
 Gli oggetti SCP sono le singole anomalie contenute e studiate dalla Fondazione SCP. Ogni SCP viene assegnato un numero unico e documentato con una descrizione dettagliata, procedure di contenimento e informazioni rilevanti sulle sue caratteristiche e comportamenti.
@@ -99,5 +100,5 @@ Elenco di query utilizzate per eseguire i **benchmark**:
 
 ## Benchmark
 
-Per eseguire i benchmark delle differnti versinoi del search engine si è deciso di utilizzare il DCG e il NDCG.
+Per eseguire i benchmark delle differenti versioni del search engine si è deciso di utilizzare il DCG e NDCG.
 I risultati sono consultabili nel file [benchmarks.pdf](benchmarks.pdf), oppure visualizzando il seguente [google sheet](https://docs.google.com/spreadsheets/d/184XW-nMnwe-zerCpLHr3Hv3OT4zajAOKnY5VZjWIOJU/edit?usp=sharing)
