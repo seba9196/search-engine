@@ -1,5 +1,6 @@
 indexdir/
 doc2vec.model
+results.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
