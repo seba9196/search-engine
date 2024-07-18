@@ -1,16 +1,18 @@
 # Search-Engine
 
-Progetto per il corso universitario di Gestione dell'Informazione
+Progetto per il corso universitario di Gestione dell'Informazione 2023/2024
 
-# Installazione
+# Installazione ed Esecuzione
 
-Scaricare le dipendenze necessarie
+Per installare l'applicazione eseguire i seguenti comandi
     
     python3 -m venv env
     
     source env/bin/activate
     
     pip install -r requirements.txt
+
+Per eseguire l'applicazione utilizzare il seguente comando
     
     python3 search_engine.py [-h] [--train] {vector-BM25F,vector-TFIDF,doc2vec} [query]
 
@@ -20,7 +22,7 @@ Sono presenti 3 comandi principali per eseguire l'applicazione:
 * vector-TFIDF --> ricerca utilizzando l'inverted index e TF_IDF come algoritmo di ranking
 * doc2vec --> ricerca e ranking utilizzando il modello doc2vec
 
-Infine il comando **--train** permette di allenare il modello per la ricerca doc3vec.
+Infine il comando **--train** permette di allenare il modello per la ricerca doc3vec e il comando **-h** per richiamare l'help.
   
 Utilizzando il modello vettoriale l'applicazione accetta query di tipo:
 * multiple word query
@@ -72,3 +74,5 @@ Elenco di query utilizzate per eseguire i benchmark:
 
     Rapporti su SCP che esibiscono comportamenti predatori
     Query: "Reports on SCPs exhibiting predatory behaviors"
+
+# Benchmark
